@@ -174,7 +174,7 @@ proxies:
     type: ...
 ```
 
-它不是完整 Clash 配置，不会自动生成 `rules`、`proxy-groups`、`dns` 等完整配置。适合把节点交给支持订阅的客户端继续处理。
+它不是完整 Clash 配置，不会自动生成 `rules`、`proxy-groups`、`dns` 等完整配置。适合把节点交给支持订阅的客户端继续处理。你可是试试我的本地覆写规则  [clash_override](https://github.com/AITIAN-GH/light-subconverter/blob/main/clash_override.js)
 
 ## 开源协议
 
