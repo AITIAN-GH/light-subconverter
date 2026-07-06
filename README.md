@@ -1,4 +1,4 @@
-# 节点订阅转换工具：从安装到使用
+# 基于Python的订阅转换小工具
 
 这个工具用来把订阅文件转换成 Clash/Mihomo 或 v2rayN 能用的格式。
 
@@ -176,3 +176,12 @@ proxies:
 
 它不是完整 Clash 配置，不会自动生成 `rules`、`proxy-groups`、`dns` 等完整配置。适合把节点交给支持订阅的客户端继续处理。
 
+## 开源协议
+
+本项目基于 [GPL-3.0](https://github.com/AITIAN-GH/light-subconverter/blob/main/LICENSE) 协议开源。
+
+## 感谢 
+
+https://github.com/tindy2013/subconverter
+
+https://github.com/MetaCubeX/subconverter
