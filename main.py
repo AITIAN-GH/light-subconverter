@@ -44,7 +44,8 @@ def b64e(s, urlsafe=False, pad=True):
 def try_b64_text(s):
     """Internal helper."""
     s = s.strip()
-    if not s or any(c in s for c in "\n") and "://" in s:
+    # Already plain text (a link or Clash YAML), not base64 to decode.
+    if not s or "://" in s or "proxies:" in s:
         return None
     try:
         dec = b64d(s)
@@ -391,7 +392,8 @@ def _frag(name):
 
 
 def emit_ss(n):
-    userinfo = b64e("%s:%s" % (n["cipher"], n["password"]), urlsafe=True, pad=False)
+    userinfo = b64e("%s:%s" % (n.get("cipher", ""), n.get("password", "")),
+                    urlsafe=True, pad=False)
     base = "ss://%s@%s:%s" % (userinfo, n["server"], n["port"])
     if n.get("plugin") == "obfs":
         o = n.get("plugin-opts", {})
@@ -425,14 +427,15 @@ def emit_vmess(n):
         j["path"] = n.get("grpc-service", "")
     elif net in ("h2", "http"):
         j["path"] = n.get("h2-path", "/")
-        j["host"] = n.get("h2-host", "")
+        h2host = n.get("h2-host", "")
+        j["host"] = h2host[0] if isinstance(h2host, list) else h2host
     elif net == "tcp" and n.get("header-type") == "http":
         j["type"] = "http"
         j["path"] = n.get("http-path", "/")
         j["host"] = n.get("http-host", "")
     if n.get("tls"):
         j["tls"] = "tls"
-        j["sni"] = n.get("sni", "")
+        j["sni"] = n.get("sni") or n.get("ws-host") or n["server"]
     if n.get("alpn"):
         j["alpn"] = ",".join(n["alpn"])
     if n.get("fp"):
@@ -457,8 +460,9 @@ def _build_transport_query(n, q):
     elif net in ("h2", "http"):
         if n.get("h2-path"):
             q["path"] = n["h2-path"]
-        if n.get("h2-host"):
-            q["host"] = n["h2-host"]
+        h2h = n.get("h2-host")
+        if h2h:  # link host is a single value; take the first if a list
+            q["host"] = h2h[0] if isinstance(h2h, list) else h2h
     elif net == "xhttp":
         q["path"] = n.get("xhttp-path", "/")
         if n.get("xhttp-host"):
@@ -518,16 +522,17 @@ def emit_trojan(n):
     _build_tls_query(n, q, default_security="tls")
     if q.get("security") == "none":  # trojan defaults to TLS
         q["security"] = "tls"
+    if not q.get("sni"):  # align with mihomo: default SNI to server address
+        q["sni"] = n["server"]
     _build_transport_query(n, q)
     query = encode_query(q)
-    return "trojan://%s@%s:%s?%s%s" % (quote(n["password"], safe=""), n["server"],
+    return "trojan://%s@%s:%s?%s%s" % (quote(n.get("password", ""), safe=""), n["server"],
                                        n["port"], query, _frag(n.get("name", "")))
 
 
 def emit_hysteria2(n):
     q = {}
-    if n.get("sni"):
-        q["sni"] = n["sni"]
+    q["sni"] = n["sni"] if n.get("sni") else n["server"]
     if n.get("skip-cert-verify"):
         q["insecure"] = "1"
     if n.get("obfs"):
@@ -660,6 +665,7 @@ def clash_to_node(p):
         return node
 
     # Common TLS/SNI and transport options.
+    if p.get("tls"):
         node["tls"] = True
     sni = p.get("servername") or p.get("sni")
     if sni:
@@ -696,7 +702,9 @@ def clash_to_node(p):
                 else (ho.get("path") or ["/"])[0]
             hosts = ho.get("host") or ho.get("Host")
             if hosts:
-                node["h2-host"] = hosts[0] if isinstance(hosts, list) else hosts
+                # Keep the full list so Clash->Clash rebuild preserves every
+                # host; the link layer picks the first one (URI host is single).
+                node["h2-host"] = hosts
         elif net == "xhttp":
             xo = p.get("xhttp-opts", {})
             node["xhttp-path"] = xo.get("path", "/")
@@ -711,7 +719,13 @@ def clash_to_node(p):
 
 def node_to_clash(n):
     if isinstance(n.get("_clash"), dict):
-        return dict(n["_clash"])
+        p = dict(n["_clash"])
+        # Re-apply corrections that normalize() may have added to the node body
+        # after it was cached (e.g. vless flow implies TLS), so Clash->Clash
+        # output reflects them instead of the stale original proxy.
+        if n.get("tls") and not p.get("tls"):
+            p["tls"] = True
+        return p
     t = n["type"]
     p = {"name": n.get("name", ""), "type": t,
          "server": n["server"], "port": n["port"]}
@@ -802,7 +816,8 @@ def node_to_clash(n):
         elif net in ("h2", "http"):
             ho = {"path": n.get("h2-path", "/")}
             if n.get("h2-host"):
-                ho["host"] = [n["h2-host"]]
+                h = n["h2-host"]
+                ho["host"] = h if isinstance(h, list) else [h]
             p["h2-opts"] = ho
         elif net == "xhttp":
             xo = {"path": n.get("xhttp-path", "/")}
